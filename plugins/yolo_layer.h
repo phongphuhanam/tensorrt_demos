@@ -1,7 +1,7 @@
 #ifndef _YOLO_LAYER_H
 #define _YOLO_LAYER_H
 
-#include <cassert>
+//#include <cassert>
 #include <vector>
 #include <string>
 #include <iostream>
@@ -21,6 +21,15 @@
         }                                                       \
     } while (0)
 
+#define ASSERT(assertion)                                        \
+    do {                                                        \
+        if (!(assertion)) {                                     \
+            std::cerr << "#assertion " << __FILE__ << ","       \
+                      << __LINE__ << std::endl;                 \
+            abort();                                            \
+        }                                                       \
+    } while(0)
+
 namespace Yolo
 {
     static constexpr float IGNORE_THRESH = 0.01f;
@@ -35,63 +44,50 @@ namespace Yolo
 
 namespace nvinfer1
 {
-    class YoloLayerPlugin: public IPluginV2IOExt
+    class YoloPluginDynamic: public IPluginV2DynamicExt
     {
         public:
-            YoloLayerPlugin(int yolo_width, int yolo_height, int num_anchors, float* anchors, int num_classes, int input_width, int input_height, float scale_x_y);
-            YoloLayerPlugin(const void* data, size_t length);
+            YoloPluginDynamic(const std::string name, int yolo_width, int yolo_height, int num_anchors, float* anchors, int num_classes, int input_width, int input_height, float scale_x_y);
 
-            ~YoloLayerPlugin() override = default;
+            YoloPluginDynamic(const std::string name, const void* data, size_t length);
+            YoloPluginDynamic() = delete;
 
-            int getNbOutputs() const override
-            {
-                return 1;
-            }
+            // IPluginV2DynamicExt Methods
 
-            Dims getOutputDimensions(int index, const Dims* inputs, int nbInputDims) override;
+            IPluginV2DynamicExt* clone() const override;
 
-            int initialize() override;
+            DimsExprs getOutputDimensions(int outputIndex, const DimsExprs* inputs, int nbInputs, IExprBuilder& exprBuilder) override;
 
-            void terminate() override;
+            bool supportsFormatCombination(int pos, const PluginTensorDesc* inOut, int nbInputs, int nbOutputs) override;
 
-            virtual size_t getWorkspaceSize(int maxBatchSize) const override { return 0;}
+            void configurePlugin(const DynamicPluginTensorDesc* in, int nbInputs, const DynamicPluginTensorDesc* out, int nbOutputs) override {};
 
-            virtual int enqueue(int batchSize, const void*const * inputs, void** outputs, void* workspace, cudaStream_t stream) override;
+            size_t getWorkspaceSize(const PluginTensorDesc* inputs, int nbInputs, const PluginTensorDesc* outputs, int nbOutputs) const override { return 0; }
 
-            virtual size_t getSerializationSize() const override;
+            int enqueue(const PluginTensorDesc* inputDesc, const PluginTensorDesc* outputDesc, const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) override;
 
-            virtual void serialize(void* buffer) const override;
-
-            bool supportsFormatCombination(int pos, const PluginTensorDesc* inOut, int nbInputs, int nbOutputs) const override {
-                return inOut[pos].format == TensorFormat::kLINEAR && inOut[pos].type == DataType::kFLOAT;
-            }
-
-            const char* getPluginType() const override;
-
-            const char* getPluginVersion() const override;
-
-            void destroy() override;
-
-            IPluginV2IOExt* clone() const override;
-
-            void setPluginNamespace(const char* pluginNamespace) override;
-
-            const char* getPluginNamespace() const override;
+            // IPluginV2Ext Methods
 
             DataType getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const override;
 
-            bool isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const override;
+            // IPluginV2 Methods
 
-            bool canBroadcastInputAcrossBatch(int inputIndex) const override;
-
-            void attachToContext(cudnnContext* cudnnContext, cublasContext* cublasContext, IGpuAllocator* gpuAllocator) override;
-
-            void configurePlugin(const PluginTensorDesc* in, int nbInput, const PluginTensorDesc* out, int nbOutput) override TRTNOEXCEPT;
-
-            void detachFromContext() override;
+            const char* getPluginType() const override;
+            const char* getPluginVersion() const override;
+            int getNbOutputs() const override { return 1; }
+            int initialize() override;
+            void terminate() override;
+            size_t getSerializationSize() const override;
+            void serialize(void* buffer) const override;
+            void destroy() override;
+            void setPluginNamespace(const char* pluginNamespace) override;
+            const char* getPluginNamespace() const override;
 
         private:
             void forwardGpu(const float* const* inputs, float* output, cudaStream_t stream, int batchSize = 1);
+
+            const std::string mLayerName;
+            std::string mPluginNamespace;
 
             int mThreadCount = 64;
             int mYoloWidth, mYoloHeight, mNumAnchors;
@@ -101,15 +97,21 @@ namespace nvinfer1
             int mInputWidth, mInputHeight;
             float mScaleXY;
 
-            const char* mPluginNamespace;
+        protected:
+            // To prevent compiler warnings.
+            using IPluginV2DynamicExt::canBroadcastInputAcrossBatch;
+            using IPluginV2DynamicExt::configurePlugin;
+            using IPluginV2DynamicExt::enqueue;
+            using IPluginV2DynamicExt::getOutputDimensions;
+            using IPluginV2DynamicExt::getWorkspaceSize;
+            using IPluginV2DynamicExt::isOutputBroadcastAcrossBatch;
+            using IPluginV2DynamicExt::supportsFormat;
     };
 
-    class YoloPluginCreator : public IPluginCreator
+    class YoloPluginDynamicCreator : public IPluginCreator
     {
         public:
-            YoloPluginCreator();
-
-            ~YoloPluginCreator() override = default;
+            YoloPluginDynamicCreator();
 
             const char* getPluginName() const override;
 
@@ -117,19 +119,13 @@ namespace nvinfer1
 
             const PluginFieldCollection* getFieldNames() override;
 
-            IPluginV2IOExt* createPlugin(const char* name, const PluginFieldCollection* fc) override;
+            IPluginV2* createPlugin(const char* name, const PluginFieldCollection* fc) override;
 
-            IPluginV2IOExt* deserializePlugin(const char* name, const void* serialData, size_t serialLength) override;
+            IPluginV2* deserializePlugin(const char* name, const void* serialData, size_t serialLength) override;
 
-            void setPluginNamespace(const char* libNamespace) override
-            {
-                mNamespace = libNamespace;
-            }
+            void setPluginNamespace(const char* libNamespace) override { mNamespace = libNamespace; }
 
-            const char* getPluginNamespace() const override
-            {
-                return mNamespace.c_str();
-            }
+            const char* getPluginNamespace() const override { return mNamespace.c_str(); }
 
         private:
             static PluginFieldCollection mFC;

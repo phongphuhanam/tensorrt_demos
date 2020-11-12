@@ -144,17 +144,27 @@ class HostDeviceMem(object):
         return self.__str__()
 
 
+def get_binding_volume(dims, batch_size=1):
+    """Calculate tensor volume based on its dims (shape).
+
+    Note dims[0] might be -1 for a dynamic batched engine, so we replace
+    that with batch_size.
+    """
+    volume = batch_size
+    for d in dims[1:]:
+        volume *= d
+    return volume
+
+
 def allocate_buffers(engine):
     """Allocates all host/device in/out buffers required for an engine."""
     inputs = []
     outputs = []
     bindings = []
-    output_idx = 0
     stream = cuda.Stream()
     assert 3 <= len(engine) <= 4  # expect 1 input, plus 2 or 3 outpus
     for binding in engine:
-        size = trt.volume(engine.get_binding_shape(binding)) * \
-               engine.max_batch_size
+        size = get_binding_volume(engine.get_binding_shape(binding))
         dtype = trt.nptype(engine.get_binding_dtype(binding))
         # Allocate host and device buffers
         host_mem = cuda.pagelocked_empty(size, dtype)
@@ -169,7 +179,6 @@ def allocate_buffers(engine):
             # output of 7 float32 values
             assert size % 7 == 0
             outputs.append(HostDeviceMem(host_mem, device_mem))
-            output_idx += 1
     return inputs, outputs, bindings, stream
 
 
@@ -252,6 +261,9 @@ class TrtYOLO(object):
 
         try:
             self.context = self.engine.create_execution_context()
+            input_shape = self.context.get_binding_shape(0)
+            input_shape[0] = 1  # set batch_size to 1
+            assert self.context.set_binding_shape(0, input_shape)
             self.inputs, self.outputs, self.bindings, self.stream = \
                 allocate_buffers(self.engine)
         except Exception as e:

@@ -124,15 +124,15 @@ def add_yolo_plugins(network, model_name, num_classes, logger):
     if any([s < 1.0 for s in scales]):
         raise ValueError('bad scale_x_y: %s' % str(scales))
 
-    plugin_creator = get_plugin_creator('YoloLayer_TRT', logger)
+    plugin_creator = get_plugin_creator('YoloPluginDynamic_TRT', logger)
     if not plugin_creator:
-        raise RuntimeError('cannot get YoloLayer_TRT plugin creator')
+        raise RuntimeError('cannot get YoloPluginDynamic_TRT creator')
     old_tensors = [network.get_output(i) for i in range(network.num_outputs)]
     new_tensors = [None] * network.num_outputs
     for i, old_tensor in enumerate(old_tensors):
         new_tensors[i] = network.add_plugin_v2(
             [old_tensor],
-            plugin_creator.create_plugin('YoloLayer_TRT', trt.PluginFieldCollection([
+            plugin_creator.create_plugin('YoloPluginDynamic_TRT', trt.PluginFieldCollection([
                 trt.PluginField("yoloWidth", np.array(yolo_whs[i][0], dtype=np.int32), trt.PluginFieldType.INT32),
                 trt.PluginField("yoloHeight", np.array(yolo_whs[i][1], dtype=np.int32), trt.PluginFieldType.INT32),
                 trt.PluginField("inputWidth", np.array(input_width, dtype=np.int32), trt.PluginFieldType.INT32),

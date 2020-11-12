@@ -131,7 +131,7 @@ def build_engine(model_name, category_num, do_int8, dla_core,
                     'calib_images', (net_h, net_w), 'calib_%s.bin' % model_name)
             engine = builder.build_cuda_engine(network)
         else:  # new API: build_engine() with builder config
-            network = set_net_batch(network, batch_size)
+            #network = set_net_batch(network, batch_size)
             builder.max_batch_size = batch_size
             config = builder.create_builder_config()
             config.max_workspace_size = 1 << 30
@@ -140,7 +140,7 @@ def build_engine(model_name, category_num, do_int8, dla_core,
             profile = builder.create_optimization_profile()
             profile.set_shape(
                 '000_net',                      # input tensor name
-                (batch_size, 3, net_h, net_w),  # min shape
+                (         1, 3, net_h, net_w),  # min shape
                 (batch_size, 3, net_h, net_w),  # opt shape
                 (batch_size, 3, net_h, net_w))  # max shape
             config.add_optimization_profile(profile)
