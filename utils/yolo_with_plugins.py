@@ -144,16 +144,13 @@ class HostDeviceMem(object):
         return self.__str__()
 
 
-def get_binding_volume(dims, batch_size=1):
+def binding_shape_to_volume(dims, batch_size=1):
     """Calculate tensor volume based on its dims (shape).
 
     Note dims[0] might be -1 for a dynamic batched engine, so we replace
     that with batch_size.
     """
-    volume = batch_size
-    for d in dims[1:]:
-        volume *= d
-    return volume
+    return int(batch_size * np.product(np.array(dims[1:])))
 
 
 def allocate_buffers(engine):
@@ -164,7 +161,7 @@ def allocate_buffers(engine):
     stream = cuda.Stream()
     assert 3 <= len(engine) <= 4  # expect 1 input, plus 2 or 3 outpus
     for binding in engine:
-        size = get_binding_volume(engine.get_binding_shape(binding))
+        size = binding_shape_to_volume(engine.get_binding_shape(binding))
         dtype = trt.nptype(engine.get_binding_dtype(binding))
         # Allocate host and device buffers
         host_mem = cuda.pagelocked_empty(size, dtype)
