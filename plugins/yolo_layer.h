@@ -47,7 +47,7 @@ namespace nvinfer1
     class YoloPluginDynamic: public IPluginV2DynamicExt
     {
         public:
-            YoloPluginDynamic(const std::string name, int yolo_width, int yolo_height, int num_anchors, float* anchors, int num_classes, int input_width, int input_height, float scale_x_y);
+            YoloPluginDynamic(const std::string name, int yolo_width, int yolo_height, int num_anchors, float* anchors, int num_classes, int input_width, int input_height, float scale_x_y, int new_coords);
 
             YoloPluginDynamic(const std::string name, const void* data, size_t length);
             YoloPluginDynamic() = delete;
@@ -96,6 +96,7 @@ namespace nvinfer1
             int mNumClasses;
             int mInputWidth, mInputHeight;
             float mScaleXY;
+            int mNewCoords = 0;
 
         protected:
             // To prevent compiler warnings.
