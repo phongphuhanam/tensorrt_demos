@@ -398,7 +398,7 @@ namespace nvinfer1
             else
             {
                 std::cerr <<  "Unknown attribute: " << attrName << std::endl;
-                assert(0);
+                ASSERT(0);
             }
         }
         ASSERT(yolo_width > 0 && yolo_height > 0);
