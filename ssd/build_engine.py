@@ -16,7 +16,7 @@ import numpy as np
 import uff
 import tensorrt as trt
 import graphsurgeon as gs
-
+import tensorflow as tf
 
 DIR_NAME = os.path.dirname(__file__)
 LIB_FILE = os.path.abspath(os.path.join(DIR_NAME, 'libflattenconcat.so'))
@@ -132,7 +132,7 @@ def add_anchor_input(graph):
     1. https://www.minds.ai/post/deploying-ssd-mobilenet-v2-on-the-nvidia-jetson-and-nano-platforms
     """
     data = np.array([1, 1], dtype=np.float32)
-    anchor_input = gs.create_node('AnchorInput', 'Const', value=data)
+    anchor_input = gs.create_node('AnchorInput', 'Const', value=data, dtype=tf.float32)
     graph.append(anchor_input)
     graph.find_nodes_by_op('GridAnchor_TRT')[0].input.insert(0, 'AnchorInput')
     return graph
@@ -159,7 +159,8 @@ def add_plugin(graph, model, spec):
     Input = gs.create_plugin_node(
         name='Input',
         op='Placeholder',
-        shape=(1,) + INPUT_DIMS
+        shape=(1,) + INPUT_DIMS,
+        dtype=tf.float32
     )
 
     PriorBox = gs.create_plugin_node(
@@ -170,7 +171,8 @@ def add_plugin(graph, model, spec):
         aspectRatios=[1.0, 2.0, 0.5, 3.0, 0.33],
         variance=[0.1, 0.1, 0.2, 0.2],
         featureMapShapes=[19, 10, 5, 3, 2, 1],
-        numLayers=6
+        numLayers=6,
+        dtype=tf.float32
     )
 
     NMS = gs.create_plugin_node(
@@ -186,13 +188,15 @@ def add_plugin(graph, model, spec):
         numClasses=numClasses,  # was 91
         inputOrder=inputOrder,
         confSigmoid=1,
-        isNormalized=1
+        isNormalized=1,
+        dtype=tf.float32
     )
 
     concat_priorbox = gs.create_node(
         'concat_priorbox',
         op='ConcatV2',
-        axis=2
+        axis=2,
+        dtype=tf.float32
     )
 
     if trt.__version__[0] >= '7':
@@ -200,22 +204,26 @@ def add_plugin(graph, model, spec):
             'concat_box_loc',
             op='FlattenConcat_TRT',
             axis=1,
-            ignoreBatch=0
+            ignoreBatch=0,
+            dtype=tf.float32
         )
         concat_box_conf = gs.create_plugin_node(
             'concat_box_conf',
             op='FlattenConcat_TRT',
             axis=1,
-            ignoreBatch=0
+            ignoreBatch=0,
+            dtype=tf.float32
         )
     else:
         concat_box_loc = gs.create_plugin_node(
             'concat_box_loc',
-            op='FlattenConcat_TRT'
+            op='FlattenConcat_TRT',
+            dtype=tf.float32
         )
         concat_box_conf = gs.create_plugin_node(
             'concat_box_conf',
-            op='FlattenConcat_TRT'
+            op='FlattenConcat_TRT',
+            dtype=tf.float32
         )
 
     namespace_for_removal = [
@@ -284,11 +292,11 @@ def main():
         output_nodes=['NMS'],
         output_filename=spec['tmp_uff'],
         text=True,
-        debug_mode=DEBUG_UFF)
+        debug_mode=True)
     with trt.Builder(TRT_LOGGER) as builder, builder.create_network() as network, trt.UffParser() as parser:
         builder.max_workspace_size = 1 << 28
         builder.max_batch_size = 1
-        builder.fp16_mode = True
+        builder.fp16_mode = False
 
         parser.register_input('Input', INPUT_DIMS)
         parser.register_output('MarkOutput_0')
